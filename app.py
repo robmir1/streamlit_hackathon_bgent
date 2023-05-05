@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from model import *
+
 import vowpalwabbit as pyvw
 import streamlit as st
 
