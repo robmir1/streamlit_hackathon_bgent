@@ -3,6 +3,8 @@ import numpy as np
 
 import vowpalwabbit as pyvw
 import streamlit as st
+import snowflake.connector
+
 
 import pandas as pd
 import numpy as np
@@ -11,6 +13,7 @@ import uuid
 from snowflake.snowpark.session import Session
 from snowflake.snowpark.functions import col, lag
 from snowflake.snowpark.window import Window
+import snowflake.connector
 import streamlit as st
 
 
@@ -63,12 +66,33 @@ username = st.secrets.snowflake["user"]
 password = st.secrets.snowflake["password"] 
 database = st.secrets.snowflake["database"] 
 
+connection_parameters = {
+   "account": account,
+   "user": username,
+   "password": password,
+   "warehouse": "compute_wh",
+   "role": "accountadmin",
+   "database": database,
+   "schema": "DATA"
+}
 
 def create_snowflake_connection():
+    conn = snowflake.connector.connect(
+        account=account,
+        password=password,
+        user=username,
+        warehouse="compute_wh",
+        database=database,
+        schema="DATA"
+    )
+
+    return conn
+
+def create_session_object():
     """Create Snowpark session object"""
     connection_parameters = st.secrets["snowflake"]
-    conn = Session.builder.configs(connection_parameters).create()
-    return conn
+    session = Session.builder.configs(connection_parameters).create()
+    return session
 
 
 
@@ -100,7 +124,7 @@ def training_cb(bandit, vowpal_workspace, filename):
     for i in bandit.generatedID.unique():
         bandit_loop = bandit[bandit['generatedID'] == i]
         context = bandit_loop[['VALIDATED_PARKING',  'MON_TUE_WED_THU_FRI', 'SAT', 'SUN','YES', 'BAKERY', 'BAR', 'BAR_PUB_BREWERY', 'BARBECUE', 'BREAKFAST_BRUNCH', 'MEXICAN', 'VEGETARIAN', 'INTERNATIONAL', ]].iloc[:1]
-        context_dict = context.to_dict('records')
+        context_dict = context.to_dict('r')
         bandit_loop.reset_index(inplace=True, drop=True)
         prob_action = bandit_loop.prob_action
         reward = bandit_loop.RATING * -1
@@ -288,8 +312,7 @@ with side_bar.form('myform'):
 		df['generatedID'] = [uuid.uuid4() for _ in range(len(df))]
 		preddd = pyvw.Workspace(f"--cb 112 -i cb.snowflake_bandit")
 		a= recommending_cb(df, preddd)
-		
-		session = create_snowflake_connection()
+		session = create_session_object()
 		snow_df_pce = (session.table("BANDIT.DATA.RATINGS")) 
 		snow_df_pce.show()
 		data = snow_df_pce.to_pandas()
