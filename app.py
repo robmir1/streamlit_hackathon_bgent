@@ -61,10 +61,10 @@ def vowpal_wabit_context_string(user_feature_dict):
 
 
 
-account = st.secrets["account"]
-username = st.secrets["user"] 
-password = st.secrets["password"] 
-database = st.secrets["database"] 
+account = st.secrets["snowflake"]["account"]
+username = st.secrets["snowflake"]["user"] 
+password = st.secrets["snowflake"]["password"] 
+database = st.secrets["snowflake"]["database"] 
 
 connection_parameters = {
    "account": account,
@@ -90,7 +90,7 @@ def create_snowflake_connection():
 
 def create_session_object():
     """Create Snowpark session object"""
-    connection_parameters = st.secrets
+    connection_parameters = st.secrets["snowflake"]
     session = Session.builder.configs(connection_parameters).create()
     return session
 
@@ -124,7 +124,7 @@ def training_cb(bandit, vowpal_workspace, filename):
     for i in bandit.generatedID.unique():
         bandit_loop = bandit[bandit['generatedID'] == i]
         context = bandit_loop[['VALIDATED_PARKING',  'MON_TUE_WED_THU_FRI', 'SAT', 'SUN','YES', 'BAKERY', 'BAR', 'BAR_PUB_BREWERY', 'BARBECUE', 'BREAKFAST_BRUNCH', 'MEXICAN', 'VEGETARIAN', 'INTERNATIONAL', ]].iloc[:1]
-        context_dict = context.to_dict('r')
+        context_dict = context.to_dict(orient='records')
         bandit_loop.reset_index(inplace=True, drop=True)
         prob_action = bandit_loop.prob_action
         reward = bandit_loop.RATING * -1
@@ -148,7 +148,7 @@ def recommending_cb(bandit, vowpal_workspace):
     for i in bandit.generatedID.unique():
         bandit_loop = bandit[bandit['generatedID'] == i]
         context = bandit_loop[['VALIDATED_PARKING',  'MON_TUE_WED_THU_FRI', 'SAT', 'SUN', 'YES', 'BAKERY', 'BAR', 'BAR_PUB_BREWERY', 'BARBECUE', 'BREAKFAST_BRUNCH', 'MEXICAN', 'VEGETARIAN', 'INTERNATIONAL', ]].iloc[:1]
-        context_dict = context.to_dict('r')
+        context_dict = context.to_dict(orient='records')
         bandit_loop.reset_index(inplace=True, drop=True)
 
         daten =[
@@ -301,11 +301,10 @@ with side_bar.form('myform'):
 
 		}
 		df = pd.DataFrame(details.items(), columns=['Category', 'Value'])
-		df = df.transpose()
+		
 		sub = True
-		new_header = df.iloc[0]
-		df = df[1:]
-		df.columns = new_header
+
+		df = df.set_index('Category').T
 		df['MEXICAN'] = np.where(df['Food'] == 'MEXICAN', 1, 0)
 		df['INTERNATIONAL'] = np.where(df['Food'] == 'INTERNATIONAL', 1, 0)
 		df = df.replace({'Yes': 1, 'No': 0})
@@ -313,9 +312,9 @@ with side_bar.form('myform'):
 		preddd = pyvw.Workspace(f"--cb 112 -i cb.snowflake_bandit")
 		a= recommending_cb(df, preddd)
 		session = create_session_object()
-		snow_df_pce = (session.table("BANDIT.DATA.RATINGS")) 
-		snow_df_pce.show()
-		data = snow_df_pce.to_pandas()
+		snow_df_pce = session.sql("SELECT * FROM BANDIT.DATA.RATINGS").collect() 
+		#snow_df_pce.show()
+		data = pd.DataFrame(snow_df_pce)
 		if "rating2" not in st.session_state:
 			st.session_state.rating2 = None
 		if "submitted2" not in st.session_state:
